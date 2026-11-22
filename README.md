@@ -62,7 +62,7 @@ python manage.py migrate
 # Ingest all CSV data (idempotent - safe to run multiple times)
 python manage.py import_data
 
-# Run all 23 backend & tenant isolation tests
+# Run all 24 backend & tenant isolation tests
 pytest -v
 ```
 
@@ -81,6 +81,8 @@ npm install
 npm run dev
 ```
 Open your browser to: `http://localhost:5173`
+
+*(Alternatively, to run everything with a single command without keeping a Node dev server open: run `npm run build` once in `frontend`, then `python manage.py runserver 8000` serves the built React app directly at `http://127.0.0.1:8000/`.)*
 
 ---
 
