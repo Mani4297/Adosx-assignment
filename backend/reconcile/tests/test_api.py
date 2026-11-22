@@ -125,3 +125,9 @@ def test_api_orgs_endpoint(api_client, setup_test_data):
     org_ids = [item["org_id"] for item in response.data]
     assert "ORG-A" in org_ids
     assert "ORG-B" in org_ids
+
+
+def test_root_endpoint_status_or_frontend(api_client):
+    """The root / endpoint responds with 200 OK (serving built frontend or status JSON)."""
+    response = api_client.get("/")
+    assert response.status_code == 200

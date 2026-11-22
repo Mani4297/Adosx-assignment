@@ -14,10 +14,35 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from pathlib import Path
 from django.contrib import admin
-from django.urls import include, path
+from django.http import HttpResponse, JsonResponse
+from django.urls import include, path, re_path
+from django.views.static import serve
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DIST_DIR = BASE_DIR.parent / "frontend" / "dist"
+
+
+def frontend_index(request):
+    """Serves the production build of the React frontend if built, or status info."""
+    index_file = DIST_DIR / "index.html"
+    if index_file.exists():
+        with open(index_file, "r", encoding="utf-8") as f:
+            return HttpResponse(f.read())
+    return JsonResponse({
+        "status": "DealerOS Reconciliation API is running",
+        "endpoints": {
+            "disagreements": "/api/disagreements/?org=ORG-A",
+            "orgs": "/api/orgs/",
+        },
+        "frontend_dev_server": "http://localhost:5173",
+    })
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('reconcile.urls')),
+    path('', frontend_index, name='frontend-root'),
+    re_path(r'^assets/(?P<path>.*)$', serve, {'document_root': DIST_DIR / 'assets'}),
 ]
