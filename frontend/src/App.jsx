@@ -97,7 +97,10 @@ export default function App() {
       params.set('search', searchQuery.trim());
     }
 
-    const apiUrl = `/api/disagreements/?${params.toString()}`;
+    const apiBase = (window.location.port === '8000' || window.location.port === '5173')
+      ? ''
+      : (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000');
+    const apiUrl = `${apiBase}/api/disagreements/?${params.toString()}`;
 
     fetch(apiUrl)
       .then(async (res) => {
