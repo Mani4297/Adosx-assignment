@@ -9,7 +9,7 @@ from .compare import compare_records
 from .models import Location, SystemARecord, SystemBEntry
 
 
-def get_disagreements_for_org(org_id: str) -> List[Dict[str, Any]]:
+def get_disagreements_for_org(org_id: str, include_clean: bool = False) -> List[Dict[str, Any]]:
     """
     Fetches database records for the requested organization and runs reconciliation.
     Strict tenant boundary:
@@ -74,13 +74,13 @@ def get_disagreements_for_org(org_id: str) -> List[Dict[str, Any]]:
         })
 
     # Run comparison engine
-    return compare_records(a_records, b_entries, loc_org_map, target_org=org_id)
+    return compare_records(a_records, b_entries, loc_org_map, target_org=org_id, include_clean=include_clean)
 
 
 @api_view(["GET"])
 def disagreements_list(request):
     """
-    GET /api/disagreements/?org=ORG-A&reason=VALUE_MISMATCH&sort=-value
+    GET /api/disagreements/?org=ORG-A&reason=VALUE_MISMATCH&sort=-value&include_clean=false
     Returns tenant-scoped reconciliation disagreements.
     """
     org_id = request.query_params.get("org")
@@ -97,11 +97,33 @@ def disagreements_list(request):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    disagreements = get_disagreements_for_org(org_id)
+    include_clean = request.query_params.get("include_clean", "false").lower() in ("true", "1")
+
+    # Get complete comparison (including clean matches for executive metrics)
+    all_results = get_disagreements_for_org(org_id, include_clean=True)
+    disagreements_only = [d for d in all_results if not d.get("reason", "").startswith("CLEAN_")]
+    clean_only = [d for d in all_results if d.get("reason", "").startswith("CLEAN_")]
+
+    clean_record_ids = {d.get("record_id") for d in clean_only}
+    disagreement_record_ids = {d.get("record_id") for d in disagreements_only}
+    total_analyzed = len(clean_record_ids | disagreement_record_ids)
+    clean_count = len(clean_record_ids)
+    disagreement_count = len(disagreement_record_ids)
+    match_rate = round((clean_count / total_analyzed * 100), 1) if total_analyzed > 0 else 100.0
+
+    # Calculate total financial variance across disagreements
+    total_variance = Decimal("0.00")
+    for d in disagreements_only:
+        difference = d.get("difference")
+        if difference not in (None, ""):
+            total_variance += abs(Decimal(str(difference).replace("+", "")))
+
+    # By default, serve only discrepancies unless include_clean is requested
+    disagreements = all_results if include_clean else disagreements_only
 
     # Calculate summary counts by reason for this org
     counts_by_reason: Dict[str, int] = {}
-    for d in disagreements:
+    for d in all_results:
         r = d.get("reason", "OTHER")
         counts_by_reason[r] = counts_by_reason.get(r, 0) + 1
 
@@ -165,6 +187,11 @@ def disagreements_list(request):
     return Response({
         "org": org_id,
         "total": len(disagreements),
+        "total_disagreements": disagreement_count,
+        "total_clean": clean_count,
+        "total_analyzed": total_analyzed,
+        "match_rate_pct": match_rate,
+        "total_variance_usd": str(total_variance),
         "counts_by_reason": counts_by_reason,
         "results": disagreements,
     })

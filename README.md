@@ -18,7 +18,7 @@ A robust, multi-tenant dual-ledger reconciliation web application built with **D
   - *Identifies legitimate multi-part splits (e.g. `REC-1055`) and avoids false-positive duplicate flags.*
 - **Zero-Leak Multi-Tenant API (`views.py`)**: Enforces tenant scoping strictly at the database query level via `?org=ORG-A`. Protects cross-tenant privacy on trap rows (`REC-1077`) by masking foreign location IDs as `[External Org]`.
 - **Interactive Audit Dashboard (React)**: Real-time tenant switcher, dynamic KPI counters, reason filtering, search, and sortable financial tables.
-- **23 Comprehensive Unit & Integration Tests**: 100% test pass rate covering every disagreement reason, dirty edge cases, and cross-tenant leakage barriers.
+- **26 Comprehensive Unit & Integration Tests**: 100% test pass rate covering every disagreement reason, dirty edge cases, and cross-tenant leakage barriers.
 
 ---
 
@@ -42,7 +42,7 @@ To stay within the assessment scope and focus on correctness, data integrity, an
 
 ### 1. Clone & Set Up Backend
 ```bash
-git clone <repo-url> dealeros
+git clone https://github.com/Mani4297/Adosx-assignment.git dealeros
 cd dealeros
 
 # Create and activate virtual environment
@@ -62,7 +62,7 @@ python manage.py migrate
 # Ingest all CSV data (idempotent - safe to run multiple times)
 python manage.py import_data
 
-# Run all 24 backend & tenant isolation tests
+# Run all 26 backend & tenant isolation tests
 pytest -v
 ```
 

@@ -30,9 +30,9 @@ def run_verification():
     b_count = SystemBEntry.objects.count()
 
     print("\n[1/4] Checking Database Record Counts...")
-    print(f"  ✓ Locations table:      {loc_count} rows (Expected: 5)")
-    print(f"  ✓ System A table:       {a_count} rows (Expected: 120)")
-    print(f"  ✓ System B table:       {b_count} rows (Expected: 121)")
+    print(f"  [OK] Locations table:      {loc_count} rows (Expected: 5)")
+    print(f"  [OK] System A table:       {a_count} rows (Expected: 120)")
+    print(f"  [OK] System B table:       {b_count} rows (Expected: 121)")
 
     assert loc_count == 5, f"Expected 5 locations, found {loc_count}"
     assert a_count == 120, f"Expected 120 System A records, found {a_count}"
@@ -43,14 +43,14 @@ def run_verification():
     disagreements_a = get_disagreements_for_org("ORG-A")
     disagreements_b = get_disagreements_for_org("ORG-B")
 
-    print(f"  ✓ ORG-A Disagreements: {len(disagreements_a)} found")
+    print(f"  [OK] ORG-A Disagreements: {len(disagreements_a)} found")
     reasons_a = {}
     for d in disagreements_a:
         reasons_a[d["reason"]] = reasons_a.get(d["reason"], 0) + 1
     for r, c in sorted(reasons_a.items()):
         print(f"      - {r:18}: {c}")
 
-    print(f"  ✓ ORG-B Disagreements: {len(disagreements_b)} found")
+    print(f"  [OK] ORG-B Disagreements: {len(disagreements_b)} found")
     reasons_b = {}
     for d in disagreements_b:
         reasons_b[d["reason"]] = reasons_b.get(d["reason"], 0) + 1
@@ -68,18 +68,18 @@ def run_verification():
     # Verify mutual exclusion
     overlap = org_a_record_ids.intersection(org_b_record_ids)
     assert len(overlap) == 0, f"SECURITY LEAK: Overlapping records between tenants: {overlap}"
-    print("  ✓ Zero cross-tenant record overlap detected (100% mutually exclusive).")
+    print("  [OK] Zero cross-tenant record overlap detected (100% mutually exclusive).")
 
     # Verify trap row REC-1077 masking
     trap_row = next((d for d in disagreements_a if d["record_id"] == "REC-1077"), None)
     assert trap_row is not None, "Trap row REC-1077 missing in ORG-A"
     assert trap_row["location_b"] == "[External Org]", f"Trap row foreign location leaked: {trap_row['location_b']}"
     assert "LOC-201" not in str(trap_row), "SECURITY LEAK: LOC-201 exposed in ORG-A result"
-    print("  ✓ Trap row REC-1077 verified: System B location masked as '[External Org]'.")
+    print("  [OK] Trap row REC-1077 verified: System B location masked as '[External Org]'.")
 
     # Verify ORG-B cannot see REC-1077
     assert "REC-1077" not in org_b_record_ids, "SECURITY LEAK: REC-1077 exposed to ORG-B"
-    print("  ✓ Verified ORG-B has zero visibility into ORG-A's REC-1077.")
+    print("  [OK] Verified ORG-B has zero visibility into ORG-A's REC-1077.")
 
     # 4. API Endpoints via REST Framework Client
     print("\n[4/4] Verifying REST API Endpoints...")
@@ -88,29 +88,29 @@ def run_verification():
     # /api/orgs/
     res_orgs = client.get("/api/orgs/")
     assert res_orgs.status_code == 200, f"Expected 200, got {res_orgs.status_code}"
-    print("  ✓ GET /api/orgs/ -> 200 OK (returned 2 organizations)")
+    print("  [OK] GET /api/orgs/ -> 200 OK (returned 2 organizations)")
 
     # /api/disagreements/?org=ORG-A
     res_a = client.get("/api/disagreements/?org=ORG-A")
     assert res_a.status_code == 200
     assert res_a.data["total"] == 7
-    print("  ✓ GET /api/disagreements/?org=ORG-A -> 200 OK (7 records)")
+    print("  [OK] GET /api/disagreements/?org=ORG-A -> 200 OK (7 records)")
 
     # /api/disagreements/?org=ORG-B
     res_b = client.get("/api/disagreements/?org=ORG-B")
     assert res_b.status_code == 200
     assert res_b.data["total"] == 5
-    print("  ✓ GET /api/disagreements/?org=ORG-B -> 200 OK (5 records)")
+    print("  [OK] GET /api/disagreements/?org=ORG-B -> 200 OK (5 records)")
 
     # /api/disagreements/ without org -> 400 Bad Request
     res_err = client.get("/api/disagreements/")
     assert res_err.status_code == 400
-    print("  ✓ GET /api/disagreements/ (no org) -> 400 Bad Request (strictly enforced)")
+    print("  [OK] GET /api/disagreements/ (no org) -> 400 Bad Request (strictly enforced)")
 
     # Root endpoint /
     res_root = client.get("/")
     assert res_root.status_code == 200
-    print("  ✓ GET / -> 200 OK (Frontend Root Served)")
+    print("  [OK] GET / -> 200 OK (Frontend Root Served)")
 
     print("\n" + "=" * 66)
     print("  RESULT: ALL 4 AUDIT PHASES PASSED WITH ZERO ERRORS!")

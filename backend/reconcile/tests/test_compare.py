@@ -59,6 +59,9 @@ def test_clean_row_produces_no_disagreement():
     a = {"REC-1001": make_a_record("REC-1001")}
     b = [make_b_entry("ENT/1", "REC-1001")]
     assert compare_records(a, b, LOC_ORG_MAP) == []
+    clean_results = compare_records(a, b, LOC_ORG_MAP, include_clean=True)
+    assert len(clean_results) == 1
+    assert clean_results[0]["reason"] == "CLEAN_MATCH"
 
 
 def test_missing_in_b():
@@ -111,6 +114,47 @@ def test_split_entries_that_add_up_are_not_flagged():
         make_b_entry("ENT/4903", "REC-1055", value=Decimal("107926.39"), label="Entry part 2 of 2"),
     ]
     assert compare_records(a, b, LOC_ORG_MAP) == []
+    clean_results = compare_records(a, b, LOC_ORG_MAP, include_clean=True)
+    assert len(clean_results) == 1
+    assert clean_results[0]["reason"] == "CLEAN_SPLIT"
+
+
+def test_balanced_split_reports_other_mismatches_instead_of_clean_split():
+    a = {
+        "REC-1077": make_a_record(
+            "REC-1077",
+            location_id="LOC-102",
+            state="VOIDED",
+            total_value=Decimal("100.00"),
+        )
+    }
+    b = [
+        make_b_entry(
+            "ENT/4077A",
+            "REC-1077",
+            location_id="LOC-102",
+            recorded_on="2026-03-01",
+            value=Decimal("60.00"),
+        ),
+        make_b_entry(
+            "ENT/4077B",
+            "REC-1077",
+            location_id="LOC-201",
+            recorded_on="2026-03-02",
+            value=Decimal("40.00"),
+        ),
+    ]
+
+    results = compare_records(a, b, LOC_ORG_MAP, include_clean=True)
+
+    assert {row["reason"] for row in results} == {
+        "RECORD_VOIDED",
+        "LOCATION_MISMATCH",
+        "DATE_MISMATCH",
+    }
+    location_mismatch = next(row for row in results if row["reason"] == "LOCATION_MISMATCH")
+    assert location_mismatch["location_b"] == "LOC-102, [External Org]"
+    assert "LOC-201" not in str(results)
 
 
 def test_value_mismatch():

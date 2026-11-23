@@ -97,6 +97,69 @@ def test_api_org_b_returns_only_org_b_data(api_client, setup_test_data):
     assert data["results"][0]["record_id"] == "REC-2001"
 
 
+def test_api_clean_match_metrics_and_include_clean(api_client, setup_test_data):
+    """Clean rows contribute to summary metrics and are returned only when requested."""
+    location = Location.objects.get(location_id="LOC-101")
+    SystemARecord.objects.create(
+        record_id="REC-1003",
+        location=location,
+        event_date="2026-03-04",
+        category_code="CAT-01",
+        base_value=Decimal("30.00"),
+        adjustment=Decimal("0.00"),
+        total_value=Decimal("30.00"),
+        state="CONFIRMED",
+    )
+    SystemBEntry.objects.create(
+        entry_id="ENT-4003",
+        record_ref="REC-1003",
+        record_ref_raw="REC-1003",
+        location=location,
+        recorded_on="2026-03-04",
+        value=Decimal("30.00"),
+        value_raw="30.00",
+        label="Matching entry",
+    )
+    SystemARecord.objects.create(
+        record_id="REC-1004",
+        location=location,
+        event_date="2026-03-05",
+        category_code="CAT-01",
+        base_value=Decimal("50.00"),
+        adjustment=Decimal("0.00"),
+        total_value=Decimal("50.00"),
+        state="VOIDED",
+    )
+    for entry_id, value, recorded_on in (
+        ("ENT-4004A", "20.00", "2026-03-05"),
+        ("ENT-4004B", "30.00", "2026-03-06"),
+    ):
+        SystemBEntry.objects.create(
+            entry_id=entry_id,
+            record_ref="REC-1004",
+            record_ref_raw="REC-1004",
+            location=location,
+            recorded_on=recorded_on,
+            value=Decimal(value),
+            value_raw=value,
+            label="Split entry",
+        )
+
+    response = api_client.get("/api/disagreements/?org=ORG-A")
+    assert response.status_code == 200
+    assert response.data["total"] == 4
+    assert response.data["total_disagreements"] == 3
+    assert response.data["total_clean"] == 1
+    assert response.data["total_analyzed"] == 4
+    assert response.data["match_rate_pct"] == 25.0
+    assert all(not row["reason"].startswith("CLEAN_") for row in response.data["results"])
+
+    response_with_clean = api_client.get("/api/disagreements/?org=ORG-A&include_clean=true")
+    assert response_with_clean.status_code == 200
+    assert response_with_clean.data["total"] == 5
+    assert any(row["reason"] == "CLEAN_MATCH" for row in response_with_clean.data["results"])
+
+
 def test_api_reason_filter(api_client, setup_test_data):
     """Filtering by ?reason=MISSING_IN_B returns only that disagreement type."""
     response = api_client.get("/api/disagreements/?org=ORG-A&reason=MISSING_IN_B")

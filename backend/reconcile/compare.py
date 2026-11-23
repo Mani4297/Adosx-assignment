@@ -8,6 +8,7 @@ def compare_records(
     b_entries: List[Dict[str, Any]],
     location_org_map: Optional[Dict[str, str]] = None,
     target_org: Optional[str] = None,
+    include_clean: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Pure Python reconciliation engine comparing System A records against System B entries.
@@ -134,8 +135,91 @@ def compare_records(
                         "org_id": org,
                         "details": f"Multiple System B entries sum to {total_b}, which differs from System A total {a_tot}.",
                     })
-                # If total_b == a_tot, it is a valid split (e.g. REC-1055) -> Not an error!
-            continue
+                else:
+                    split_mismatch = state == "VOIDED"
+                    entry_locations = [e.get("location_id") for e in entries]
+                    safe_locations = [
+                        "[External Org]" if loc_map.get(location) != org else location
+                        for location in entry_locations
+                        if location
+                    ]
+                    location_b = ", ".join(safe_locations) or None
+                    entry_dates = [
+                        str(e.get("recorded_on")) if e.get("recorded_on") else None
+                        for e in entries
+                    ]
+                    recorded_dates = ", ".join(filter(None, entry_dates))
+
+                    if state == "VOIDED":
+                        disagreements.append({
+                            "reason": "RECORD_VOIDED",
+                            "record_id": rid,
+                            "entry_id": entry_ids,
+                            "location": a_loc,
+                            "location_a": a_loc,
+                            "location_b": location_b,
+                            "a_value": str(a_tot) if a_tot is not None else None,
+                            "b_value": str(total_b),
+                            "difference": None,
+                            "a_date": a_date,
+                            "b_date": recorded_dates,
+                            "org_id": org,
+                            "details": f"Record {rid} is VOIDED in System A, but System B retains active entries.",
+                        })
+
+                    if any(location and location != a_loc for location in entry_locations):
+                        split_mismatch = True
+                        disagreements.append({
+                            "reason": "LOCATION_MISMATCH",
+                            "record_id": rid,
+                            "entry_id": entry_ids,
+                            "location": a_loc,
+                            "location_a": a_loc,
+                            "location_b": location_b,
+                            "a_value": str(a_tot) if a_tot is not None else None,
+                            "b_value": str(total_b),
+                            "difference": None,
+                            "a_date": a_date,
+                            "b_date": recorded_dates,
+                            "org_id": org,
+                            "details": f"System A location is {a_loc}, while System B recorded {location_b}.",
+                        })
+
+                    if a_date and any(date and date != a_date for date in entry_dates):
+                        split_mismatch = True
+                        disagreements.append({
+                            "reason": "DATE_MISMATCH",
+                            "record_id": rid,
+                            "entry_id": entry_ids,
+                            "location": a_loc,
+                            "location_a": a_loc,
+                            "location_b": location_b,
+                            "a_value": str(a_tot) if a_tot is not None else None,
+                            "b_value": str(total_b),
+                            "difference": None,
+                            "a_date": a_date,
+                            "b_date": recorded_dates,
+                            "org_id": org,
+                            "details": f"System A event_date {a_date} differs from System B recorded_on {recorded_dates}.",
+                        })
+
+                    if include_clean and not split_mismatch:
+                        disagreements.append({
+                            "reason": "CLEAN_SPLIT",
+                            "record_id": rid,
+                            "entry_id": entry_ids,
+                            "location": a_loc,
+                            "location_a": a_loc,
+                            "location_b": location_b,
+                            "a_value": str(a_tot),
+                            "b_value": str(total_b),
+                            "difference": "0.00",
+                            "a_date": a_date,
+                            "b_date": recorded_dates,
+                            "org_id": org,
+                            "details": f"Balanced split transaction: {len(entries)} entries sum exactly to System A total {a_tot}.",
+                        })
+                continue
 
         # Case C: Exactly one entry in B
         e = entries[0]
@@ -143,9 +227,11 @@ def compare_records(
         b_loc = e.get("location_id")
         b_date = str(e.get("recorded_on")) if e.get("recorded_on") else None
         b_entry_id = e.get("entry_id")
+        has_mismatch = False
 
         # 1. Check Value Mismatch
         if b_val is None:
+            has_mismatch = True
             disagreements.append({
                 "reason": "VALUE_MISMATCH",
                 "record_id": rid,
@@ -162,6 +248,7 @@ def compare_records(
                 "details": f"System B value for {rid} is missing or blank.",
             })
         elif b_val != a_tot:
+            has_mismatch = True
             diff = b_val - a_tot
             disagreements.append({
                 "reason": "VALUE_MISMATCH",
@@ -181,6 +268,7 @@ def compare_records(
 
         # 2. Check Voided Record
         if state == "VOIDED":
+            has_mismatch = True
             disagreements.append({
                 "reason": "RECORD_VOIDED",
                 "record_id": rid,
@@ -199,6 +287,7 @@ def compare_records(
 
         # 3. Check Location Mismatch (handling cross-tenant leak prevention)
         if b_loc and b_loc != a_loc:
+            has_mismatch = True
             b_org = loc_map.get(b_loc)
             is_cross_org = (b_org != org)
             
@@ -223,6 +312,7 @@ def compare_records(
 
         # 4. Check Date Mismatch
         if b_date and a_date and b_date != a_date:
+            has_mismatch = True
             disagreements.append({
                 "reason": "DATE_MISMATCH",
                 "record_id": rid,
@@ -237,6 +327,24 @@ def compare_records(
                 "b_date": b_date,
                 "org_id": org,
                 "details": f"System A event_date {a_date} differs from System B recorded_on {b_date}.",
+            })
+
+        # 5. Clean Match
+        if not has_mismatch and include_clean:
+            disagreements.append({
+                "reason": "CLEAN_MATCH",
+                "record_id": rid,
+                "entry_id": b_entry_id,
+                "location": a_loc,
+                "location_a": a_loc,
+                "location_b": b_loc,
+                "a_value": str(a_tot) if a_tot is not None else None,
+                "b_value": str(b_val) if b_val is not None else None,
+                "difference": "0.00",
+                "a_date": a_date,
+                "b_date": b_date,
+                "org_id": org,
+                "details": "Transactions match cleanly in total value, location, and date across both systems.",
             })
 
     # 4. Filter by target_org if requested (Strict Tenant Isolation)
