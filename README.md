@@ -84,6 +84,42 @@ Open your browser to: `http://localhost:5173`
 
 *(Alternatively, to run everything with a single command without keeping a Node dev server open: run `npm run build` once in `frontend`, then `python manage.py runserver 8000` serves the built React app directly at `http://127.0.0.1:8000/`.)*
 
+## Deploying with Vercel
+
+Deploy the React frontend and Django API as separate Vercel projects. Use a
+persistent PostgreSQL database (for example, Neon through the Vercel
+Marketplace); Vercel's serverless filesystem is not persistent, so do not use
+SQLite for production.
+
+### Deploy the Django API
+
+1. Add a PostgreSQL database integration and copy its connection string into
+   the backend project's `DATABASE_URL` environment variable.
+2. Import this repository as another Vercel project and set **Root Directory**
+   to `backend`. Vercel will use Python 3.12, `backend/requirements.txt`, and
+   `backend/vercel.json`.
+3. Add these backend environment variables for Production:
+   - `SECRET_KEY`: a long, random Django secret.
+   - `DEBUG`: `False`.
+   - `ALLOWED_HOSTS`: the API's Vercel hostname (for example,
+     `dealeros-api.vercel.app`); include `.vercel.app` if preview deployment
+     hostnames also need to work.
+   - `CORS_ALLOWED_ORIGINS`: the frontend's full origin, such as
+     `https://frontend-fawn-seven-39.vercel.app`.
+   - `DATABASE_URL`: the PostgreSQL connection string from the database provider.
+4. Deploy. The configured build command runs migrations and imports the sample
+   CSV data into PostgreSQL. Verify the API at `/api/orgs/`.
+
+### Connect the frontend
+
+1. In the frontend Vercel project, open **Settings → Environment Variables**.
+2. Add `VITE_API_URL` with the backend origin only, for example
+   `https://dealeros-api.vercel.app` (no trailing slash).
+3. Redeploy the frontend, then confirm that the dashboard loads data.
+
+The demo has no user authentication. Do not expose confidential or real tenant
+data until proper authentication and authorization have been implemented.
+
 ---
 
 ## How I Worked With the AI Agent
